@@ -23,6 +23,11 @@
 const char WIFI_SSID[] = "TIM_ULTRAFIBRA_28A0";
 const char WIFI_PASSWORD[] = "64t4fu76eb";
 
+
+// Credenciais WIFI - Tome cuidado se publicar no github!
+//const char WIFI_SSID[] = "teste";
+//const char WIFI_PASSWORD[] = "mariana12";
+
 // Definição dos pinos dos LEDs
 #define LED_PIN CYW43_WL_GPIO_LED_PIN   // GPIO do CI CYW43
 #define LED_BLUE_PIN 12                 // GPIO12 - LED azul
