@@ -36,7 +36,9 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(led_control_webserver led_control_webserver.c )
+add_executable(led_control_webserver led_control_webserver.c inc/ssd1306_i2c.c)
+
+
 
 pico_set_program_name(led_control_webserver "led_control_webserver")
 pico_set_program_version(led_control_webserver "0.1")
@@ -50,8 +52,15 @@ target_link_libraries(led_control_webserver
         pico_stdlib
         hardware_gpio
         hardware_adc
+        hardware_i2c
         pico_cyw43_arch_lwip_threadsafe_background
         hardware_pwm
+        hardware_spi
+        hardware_pio
+        hardware_timer
+        hardware_clocks
+        hardware_adc
+
 )
 
 # Add the standard include files to the build

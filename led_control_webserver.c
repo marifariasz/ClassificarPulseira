@@ -19,14 +19,71 @@
 #include "lwip/tcp.h"            // Lightweight IP stack - fornece funções e estruturas para trabalhar com o protocolo TCP
 #include "lwip/netif.h"          // Lightweight IP stack - fornece funções e estruturas para trabalhar com interfaces de rede (netif)
 
+
+#include "inc/ssd1306.h"         // Display
+
+#include "hardware/i2c.h"
+#include "hardware/timer.h"
+#include "hardware/adc.h"
+#include "hardware/pwm.h"
+#include "hardware/clocks.h"
+
+
+// Configurando I2C
+#define I2C_PORT i2c1
+#define I2C_SDA 14
+#define I2C_SCL 15
+
+// Configurando Display
+#define DISPLAY_WIDTH 128
+#define DISPLAY_HEIGHT 64
+#define SQUARE_SIZE 8
+
+volatile bool led_r_estado = false;
+volatile bool led_g_estado = false;
+volatile bool led_b_estado = false;
+bool cor = true;
+absolute_time_t last_interrupt_time = 0;
+float rpm = 0;
+
+uint8_t ssd[ssd1306_buffer_length];
+
+struct render_area frame_area = {
+            .start_column = 0,
+            .end_column = ssd1306_width - 1,
+            .start_page = 0,
+            .end_page = ssd1306_n_pages - 1
+        };
+
+// Flag
+volatile char c = '~';
+volatile bool new_data = false;
+volatile int current_digit = 0;
+
+volatile int flag = 0;
+
+// Protótipos das funções
+void npDisplayDigit(int digit);
+
+// Função auxiliar para processar o comando e atualizar os displays
+void process_command(char c, int digit, char *line1, char *line2, uint8_t *ssd, struct render_area *frame_area) {
+    // Atualiza o OLED
+    memset(ssd, 0, ssd1306_buffer_length);
+    render_on_display(ssd, frame_area);
+    ssd1306_draw_string(ssd, 5, 0, line1);
+    ssd1306_draw_string(ssd, 5, 8, line2);
+    render_on_display(ssd, frame_area);
+}
+
+
 // Credenciais WIFI - Tome cuidado se publicar no github!
 const char WIFI_SSID[] = "TIM_ULTRAFIBRA_28A0";
 const char WIFI_PASSWORD[] = "64t4fu76eb";
 
 
 // Credenciais WIFI - Tome cuidado se publicar no github!
-//const char WIFI_SSID[] = "teste";
-//const char WIFI_PASSWORD[] = "mariana12";
+// const char WIFI_SSID[] = "teste";
+// const char WIFI_PASSWORD[] = "6>2Tw824";
 
 // Definição dos pinos dos LEDs
 #define LED_PIN CYW43_WL_GPIO_LED_PIN   // GPIO do CI CYW43
@@ -48,7 +105,7 @@ float temp_read(void);
 
 // Tratamento do request do usuário
 void user_request(char **request);
-
+void update_menu(uint8_t *ssd, struct render_area *frame_area);
 
 
 void setup_pwm(uint pin, uint16_t level) {
@@ -68,6 +125,35 @@ int main()
 
     // Inicializar os Pinos GPIO para acionamento dos LEDs da BitDogLab
     gpio_led_bitdog();
+    
+    
+
+    // Inicialização do i2c
+    i2c_init(i2c1, ssd1306_i2c_clock * 1000);
+    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(I2C_SDA);
+    gpio_pull_up(I2C_SCL);
+
+
+        // Configura a área de renderização do display OLED
+        ssd1306_init();
+
+        struct render_area frame_area = {
+            .start_column = 0,
+            .end_column = ssd1306_width - 1,
+            .start_page = 0,
+            .end_page = ssd1306_n_pages - 1
+        };
+        calculate_render_area_buffer_length(&frame_area);
+    
+        // zera o display inteiro
+        uint8_t ssd[ssd1306_buffer_length];
+        memset(ssd, 0, ssd1306_buffer_length);
+        render_on_display(ssd, &frame_area);
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 
     //Inicializa a arquitetura do cyw43
     while (cyw43_arch_init())
@@ -132,8 +218,15 @@ int main()
         * Este método deve ser chamado periodicamente a partir do ciclo principal 
         * quando se utiliza um estilo de sondagem pico_cyw43_arch 
         */
+
+        // Atualiza o menu do display
+        update_menu(ssd, &frame_area);
+        cor = !cor;
+
         cyw43_arch_poll(); // Necessário para manter o Wi-Fi ativo
         sleep_ms(100);      // Reduz o uso da CPU
+
+
     }
 
     //Desligar a arquitetura CYW43.
@@ -142,6 +235,30 @@ int main()
 }
 
 // -------------------------------------- Funções ---------------------------------
+
+
+void update_menu(uint8_t *ssd, struct render_area *frame_area) {
+    memset(ssd, 0, ssd1306_buffer_length);
+
+    if(flag == 1){
+        ssd1306_draw_string(ssd, 34, 20, "PULSEIRA");
+        ssd1306_draw_string(ssd, 40, 36, "LARANJA");
+        render_on_display(ssd, frame_area);
+    }else if(flag == 2){
+        ssd1306_draw_string(ssd, 34, 20, "PULSEIRA");
+        ssd1306_draw_string(ssd, 34, 36, "VERMELHA");
+        render_on_display(ssd, frame_area);
+    }else if(flag == 3){
+        ssd1306_draw_string(ssd, 34, 20, "PULSEIRA");
+        ssd1306_draw_string(ssd, 46, 36, "VERDE");
+        render_on_display(ssd, frame_area);
+    }else if(flag == 4){
+        ssd1306_draw_string(ssd, 34, 20, "PULSEIRA");
+        ssd1306_draw_string(ssd, 49, 36, "AZUL");
+        render_on_display(ssd, frame_area);
+    }
+
+}
 
 // Inicializar os Pinos GPIO para acionamento dos LEDs da BitDogLab
 void gpio_led_bitdog(void){
@@ -168,12 +285,14 @@ static err_t tcp_server_accept(void *arg, struct tcp_pcb *newpcb, err_t err)
 
 // Tratamento do request do usuário - digite aqui
 void user_request(char **request){
-
+    memset(ssd, 0, ssd1306_buffer_length);
     if (strstr(*request, "GET /muitoUrgente") != NULL)
     {
+
         gpio_put(LED_RED_PIN, 1);
         setup_pwm(LED_GREEN_PIN, 40);
         gpio_put(LED_BLUE_PIN, 0);
+        flag = 1;
     }
     if (strstr(*request, "GET /Urgente") != NULL)
     {       
@@ -181,6 +300,7 @@ void user_request(char **request){
             gpio_put(LED_GREEN_PIN, 0);
             gpio_put(LED_BLUE_PIN, 0);
             setup_pwm(LED_GREEN_PIN, 0);
+            flag = 2;
     }
 
     if (strstr(*request, "GET /poucoUrgente") != NULL)
@@ -188,6 +308,7 @@ void user_request(char **request){
             gpio_put(LED_RED_PIN, 0);
             gpio_put(LED_BLUE_PIN, 0);
             setup_pwm(LED_GREEN_PIN, 100);
+            flag = 3;
     }
     if (strstr(*request, "GET /naoUrgente") != NULL)
     {       
@@ -195,6 +316,7 @@ void user_request(char **request){
             gpio_put(LED_GREEN_PIN, 0);
             gpio_put(LED_BLUE_PIN, 1);
             setup_pwm(LED_GREEN_PIN, 0);
+            flag = 4;
     }
 };
 
