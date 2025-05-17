@@ -8,6 +8,7 @@ Este projeto cria um servidor web simples embarcado no **Raspberry Pi Pico W**, 
 - Servidor HTTP rodando na porta 80.
 - Interface web com botões para classificação de pacientes.
 - Acionamento de LEDs coloridos (RGB) com e sem PWM.
+- Exibição da classificação do paciente no display OLED.
 - Interface responsiva com HTML e CSS embutido.
 
 ## 🔵 Níveis de Classificação e LEDs
